@@ -141,7 +141,7 @@ local function entityCollidesWithMask(entity, colidesWithMask)
             return true
         end
     end
-	return false
+    return false
 end
 
 --remove everything from mask that is in maskToRemove
@@ -159,7 +159,7 @@ local function createDummyEntity(originalEntity)
     --remove collision with water tile
     local originalMask = mask_util.get_mask(dummyEntity)
     if (not originalMask) then
-        return nil
+        return
     end
 
     --handle offshore pumps specific masks and tests
@@ -246,15 +246,23 @@ local function createDummyEntity(originalEntity)
     --generate localisation from the original entity
     dummyEntity.localised_name = {"", originalEntity.localised_name or {"entity-name." .. originalEntity.name}, " - ", {"dummy_name_suffix"}}
 
-    --return the dummy prototype
-    return dummyEntity
+    data:extend({dummyEntity})
 end
 
-local function createDummyItem(originalItem)
+local function createDummyItem(originalItemName)
+    dummyName = constants.dummyPrefix .. originalItemName
+    -- Check if the item already has a dummy
+    if(data.raw["item"][dummyName] ~= nil) then
+        return
+    end
     --check if the entity has a collision mask
+            local originalItem = data.raw["item"][originalItemName]
+            if originalItem == nil then
+                return
+            end
             local dummyItem = table.deepcopy(originalItem)
             --change the name of the dummy prototype to dummyPrefix .. name
-            dummyItem.name = constants.dummyPrefix .. originalItem.name
+            dummyItem.name = dummyName
 
             --chagne place_result to dummyPrefix .. place_result
             if (dummyItem.place_result) then
@@ -302,67 +310,26 @@ local function createDummyItem(originalItem)
              --generate localisation from the original item
             dummyItem.localised_name = {"", originalItem.localised_name or {"entity-name." .. originalItem.name}, " - ", {"dummy_name_suffix"}}
 
-            return dummyItem
+            data:extend({dummyItem})
 end
 
 dummyGenerator.GenerateDummyPrototypes = function()
 
     --handle special removals
     addAlternativeLayerForSpeicalRemovals(entityTable)
-
-    for name, prototypeItem in pairs(data.raw["item"]) do
-        if prototypeItem.place_result then
-            if entityCollidesWithMask(entityTable[prototypeItem.place_result], waterCollisionMask) then
-                local dummyItem = createDummyItem(prototypeItem)
-                data:extend({dummyItem})
-                local dummyEntity = createDummyEntity(entityTable[prototypeItem.place_result])
-                data:extend({dummyEntity})
+    
+    for name, prototypeEntity in pairs(entityTable) do
+        if prototypeEntity.placeable_by then
+            if prototypeEntity.placeable_by.item then
+                createDummyItem(prototypeEntity.placeable_by.item)
+            else
+                for _, ItemToPlace in ipairs(prototypeEntity.placeable_by) do
+                    createDummyItem(ItemToPlace.item)
+                end             
             end
+            createDummyEntity(prototypeEntity)
         end
     end
-
-    --go trogh all rail-planners
-    for name, prototypeRailPlaner in pairs(data.raw["rail-planner"]) do
-
-
-        --return if this is a dummy rail-planner
-        if (util.string_starts_with(name, constants.dummyPrefix)) then
-            goto continue
-        end
-
-        --return if ral planer has no straight_rail
-        if prototypeRailPlaner.straight_rail == nil then
-            goto continue
-        end
-
-        --return if rail planer has no curved_rail
-        if prototypeRailPlaner.curved_rail == nil then
-            goto continue
-        end
-
-        local straightRailCollidesWithWater = entityCollidesWithMask(entityTable[prototypeRailPlaner.straight_rail], waterCollisionMask)
-        local curvedRailCollidesWithWater = entityCollidesWithMask(entityTable[prototypeRailPlaner.curved_rail], waterCollisionMask)
-
-        if straightRailCollidesWithWater or curvedRailCollidesWithWater then
-            local dummyItem = createDummyItem(prototypeRailPlaner)
-            data:extend({dummyItem})
-        end
-
-        if straightRailCollidesWithWater or curvedRailCollidesWithWater then
-            local dummyEntity = createDummyEntity(entityTable[prototypeRailPlaner.straight_rail])
-            data:extend({dummyEntity})
-        end
-
-        if straightRailCollidesWithWater or curvedRailCollidesWithWater then
-            local dummyEntity = createDummyEntity(entityTable[prototypeRailPlaner.curved_rail])
-            data:extend({dummyEntity})
-        end
-
-        ::continue::
-    end
-
-
-
 end
 
 return dummyGenerator
